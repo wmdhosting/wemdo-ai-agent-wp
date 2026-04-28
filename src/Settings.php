@@ -1,0 +1,111 @@
+<?php
+namespace Wemdo\AIAgent;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class Settings {
+    const NONCE_ACTION = 'wemdo_save_settings';
+    const NONCE_FIELD  = 'wemdo_settings_nonce';
+
+    public static function init(): void {
+        add_action('admin_menu', [self::class, 'register_menu']);
+        add_action('admin_post_wemdo_save_settings', [self::class, 'handle_save']);
+        add_action('wp_ajax_wemdo_verify_key', [self::class, 'handle_verify_ajax']);
+    }
+
+    public static function register_menu(): void {
+        add_options_page(
+            __('Wemdo AI Agent', 'wemdo-ai-agent'),
+            __('Wemdo AI Agent', 'wemdo-ai-agent'),
+            'manage_options',
+            'wemdo-ai-agent',
+            [self::class, 'render_page']
+        );
+    }
+
+    public static function render_page(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Insufficient permissions.', 'wemdo-ai-agent'));
+        }
+        $opts = Plugin::settings();
+        $current_locale = get_locale();
+        $auto_lang = Plugin::map_locale($current_locale);
+        include WEMDO_AI_AGENT_DIR . 'views/settings-page.php';
+    }
+
+    public static function handle_save(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Insufficient permissions.', 'wemdo-ai-agent'));
+        }
+        check_admin_referer(self::NONCE_ACTION, self::NONCE_FIELD);
+
+        $existing = Plugin::settings();
+        $api_key = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+
+        // Verify key against backend if it changed
+        $verify = ['status' => 'unchanged', 'data' => [], 'message' => ''];
+        if ($api_key && $api_key !== ($existing['api_key'] ?? '')) {
+            $verify = Api::verify_key($api_key);
+            if ($verify['status'] === 'invalid') {
+                add_settings_error('wemdo_ai_agent', 'invalid_key', $verify['message'], 'error');
+                set_transient('settings_errors', get_settings_errors(), 30);
+                wp_safe_redirect(admin_url('options-general.php?page=wemdo-ai-agent'));
+                exit;
+            }
+        }
+
+        $hidden_raw = isset($_POST['hidden_pages']) ? wp_unslash($_POST['hidden_pages']) : '';
+        $hidden_lines = array_filter(array_map('trim', explode("\n", (string) $hidden_raw)));
+
+        $allowed_modes = ['all', 'posts', 'pages', 'disabled'];
+        $display_mode = isset($_POST['display_mode']) ? (string) $_POST['display_mode'] : 'all';
+        if (!in_array($display_mode, $allowed_modes, true)) {
+            $display_mode = 'all';
+        }
+
+        $language_in = isset($_POST['language']) ? (string) $_POST['language'] : 'auto';
+        if (!preg_match('/^(auto|en|hr|sl|de|it|fr|es|pt|pl|cs|sk|hu|ro|nl|sv|da|no|fi)$/', $language_in)) {
+            $language_in = 'auto';
+        }
+
+        $new = [
+            'api_key'          => $api_key,
+            'tenant_id'        => $verify['status'] === 'valid' ? ($verify['data']['tenant_id'] ?? '') : ($existing['tenant_id'] ?? ''),
+            'tenant_name'      => $verify['status'] === 'valid' ? ($verify['data']['tenant_name'] ?? '') : ($existing['tenant_name'] ?? ''),
+            'tenant_plan'      => $verify['status'] === 'valid' ? ($verify['data']['plan'] ?? '') : ($existing['tenant_plan'] ?? ''),
+            'display_mode'     => $display_mode,
+            'hidden_pages'     => array_values($hidden_lines),
+            'language'         => $language_in,
+            'kb_sync_enabled'  => false, // v1.0 always false
+            'privacy_accepted' => !empty($_POST['privacy_accepted']),
+        ];
+
+        update_option(Plugin::OPTION_KEY, $new);
+
+        wp_cache_flush();
+        do_action('wemdo_clear_cache');
+
+        if ($verify['status'] === 'valid') {
+            add_settings_error('wemdo_ai_agent', 'saved', $verify['message'], 'success');
+        } elseif ($verify['status'] === 'unreachable') {
+            add_settings_error('wemdo_ai_agent', 'unreachable', $verify['message'], 'warning');
+        } else {
+            add_settings_error('wemdo_ai_agent', 'saved_basic', __('Settings saved.', 'wemdo-ai-agent'), 'success');
+        }
+        set_transient('settings_errors', get_settings_errors(), 30);
+        wp_safe_redirect(admin_url('options-general.php?page=wemdo-ai-agent'));
+        exit;
+    }
+
+    public static function handle_verify_ajax(): void {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Insufficient permissions.', 'wemdo-ai-agent')], 403);
+        }
+        check_ajax_referer(self::NONCE_ACTION, 'nonce');
+        $key = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+        $result = Api::verify_key($key);
+        wp_send_json($result);
+    }
+}
