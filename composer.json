@@ -1,0 +1,17 @@
+{
+    "name": "wmdhosting/wemdo-ai-agent-wp",
+    "description": "AI Agent chat widget for WordPress",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.5"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Wemdo\\AIAgent\\": "src/"
+        }
+    }
+}
