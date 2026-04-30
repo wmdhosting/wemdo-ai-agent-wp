@@ -42,12 +42,17 @@ class Settings {
         check_admin_referer(self::NONCE_ACTION, self::NONCE_FIELD);
 
         $existing = Plugin::settings();
-        $api_key = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+        // The settings page renders an EMPTY password field by design (we
+        // never echo the saved key into the DOM). An empty submission means
+        // "keep the existing key" — only a non-empty paste replaces it.
+        $pasted = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+        $existing_key = $existing['api_key'] ?? '';
+        $api_key = $pasted !== '' ? $pasted : $existing_key;
 
-        // Verify key against backend if it changed
+        // Verify only when the admin actually pasted a NEW key.
         $verify = ['status' => 'unchanged', 'data' => [], 'message' => ''];
-        if ($api_key && $api_key !== ($existing['api_key'] ?? '')) {
-            $verify = Api::verify_key($api_key);
+        if ($pasted !== '' && $pasted !== $existing_key) {
+            $verify = Api::verify_key($pasted);
             if ($verify['status'] === 'invalid') {
                 add_settings_error('wemdo_ai_agent', 'invalid_key', $verify['message'], 'error');
                 set_transient('settings_errors', get_settings_errors(), 30);
@@ -104,7 +109,11 @@ class Settings {
             wp_send_json_error(['message' => __('Insufficient permissions.', 'wemdo-ai-agent')], 403);
         }
         check_ajax_referer(self::NONCE_ACTION, 'nonce');
-        $key = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+        $pasted = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+        // Empty input means "verify the key already on file" — the settings
+        // page renders an empty input for security, so this is the normal
+        // path when the admin clicks Verify without re-pasting.
+        $key = $pasted !== '' ? $pasted : (Plugin::settings()['api_key'] ?? '');
         $result = Api::verify_key($key);
         wp_send_json($result);
     }

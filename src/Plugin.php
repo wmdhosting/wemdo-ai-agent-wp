@@ -9,8 +9,15 @@ class Plugin {
     const OPTION_KEY = 'wemdo_ai_agent_settings';
 
     public static function boot(): void {
-        // Load translations
-        load_plugin_textdomain('wemdo-ai-agent', false, dirname(plugin_basename(WEMDO_AI_AGENT_FILE)) . '/languages');
+        // Translations: WP 6.7+ deprecates calling load_plugin_textdomain
+        // before the `init` hook (the .mo loader needs context that isn't
+        // ready on `plugins_loaded`). For WP.org-distributed plugins WP
+        // auto-loads translations since 4.6 and this call is redundant —
+        // but keeping it for sites that vendor the plugin manually.
+        // Defer to `init` so 6.7+ doesn't emit a deprecation notice.
+        add_action('init', function () {
+            load_plugin_textdomain('wemdo-ai-agent', false, dirname(plugin_basename(WEMDO_AI_AGENT_FILE)) . '/languages');
+        });
 
         // Sub-services register their own hooks
         Settings::init();
