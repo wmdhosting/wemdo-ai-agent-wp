@@ -55,23 +55,35 @@ class Settings {
             $verify = Api::verify_key($pasted);
             if ($verify['status'] === 'invalid') {
                 add_settings_error('wemdo_ai_agent', 'invalid_key', $verify['message'], 'error');
-                set_transient('settings_errors', get_settings_errors(), 30);
+                set_transient('settings_errors', get_settings_errors('wemdo_ai_agent'), 30);
                 wp_safe_redirect(admin_url('options-general.php?page=wemdo-ai-agent'));
                 exit;
             }
         }
 
+        // hidden_pages: split lines + trim + sanitize_text_field per-line
+        // (strips HTML, normalizes whitespace) before storing. Functionally
+        // inert today since WidgetEmbed.php uses these only as strpos
+        // prefix-matchers against REQUEST_URI, but storing pre-sanitized
+        // values is the WP convention and removes one footgun for any
+        // future code that renders these (e.g. a "managed list" UI).
         $hidden_raw = isset($_POST['hidden_pages']) ? wp_unslash($_POST['hidden_pages']) : '';
-        $hidden_lines = array_filter(array_map('trim', explode("\n", (string) $hidden_raw)));
+        $hidden_lines = array_filter(array_map(
+            static function ($line) { return sanitize_text_field((string) $line); },
+            explode("\n", (string) $hidden_raw)
+        ));
 
         $allowed_modes = ['all', 'posts', 'pages', 'disabled'];
-        $display_mode = isset($_POST['display_mode']) ? (string) $_POST['display_mode'] : 'all';
+        $display_mode = isset($_POST['display_mode']) ? sanitize_text_field(wp_unslash($_POST['display_mode'])) : 'all';
         if (!in_array($display_mode, $allowed_modes, true)) {
             $display_mode = 'all';
         }
 
-        $language_in = isset($_POST['language']) ? (string) $_POST['language'] : 'auto';
-        if (!preg_match('/^(auto|en|hr|sl|de|it|fr|es|pt|pl|cs|sk|hu|ro|nl|sv|da|no|fi)$/', $language_in)) {
+        // Language whitelist sourced from Plugin::SUPPORTED_LANG_CODES
+        // (single source of truth shared with map_locale).
+        $language_in = isset($_POST['language']) ? sanitize_text_field(wp_unslash($_POST['language'])) : 'auto';
+        $allowed_langs = array_merge(['auto'], Plugin::SUPPORTED_LANG_CODES);
+        if (!in_array($language_in, $allowed_langs, true)) {
             $language_in = 'auto';
         }
 
@@ -99,7 +111,7 @@ class Settings {
         } else {
             add_settings_error('wemdo_ai_agent', 'saved_basic', __('Settings saved.', 'wemdo-ai-agent'), 'success');
         }
-        set_transient('settings_errors', get_settings_errors(), 30);
+        set_transient('settings_errors', get_settings_errors('wemdo_ai_agent'), 30);
         wp_safe_redirect(admin_url('options-general.php?page=wemdo-ai-agent'));
         exit;
     }

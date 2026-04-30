@@ -8,6 +8,19 @@ if (!defined('ABSPATH')) {
 class Plugin {
     const OPTION_KEY = 'wemdo_ai_agent_settings';
 
+    /**
+     * Locales the AI Layer widget knows how to render. Single source of
+     * truth for both `map_locale()` (auto-detection from WP locale) and
+     * `Settings::handle_save()` (validation of the radio-selected value).
+     * The settings page view picks a curated subset for the radio list;
+     * the validator accepts any of these so admins on a non-listed locale
+     * can still set it via direct option write or future UI expansion.
+     */
+    const SUPPORTED_LANG_CODES = [
+        'en', 'hr', 'sl', 'de', 'it', 'fr', 'es', 'pt', 'pl',
+        'cs', 'sk', 'hu', 'ro', 'nl', 'sv', 'da', 'no', 'fi',
+    ];
+
     public static function boot(): void {
         // Translations: WP 6.7+ deprecates calling load_plugin_textdomain
         // before the `init` hook (the .mo loader needs context that isn't
@@ -70,8 +83,7 @@ class Plugin {
      * Falls back to "en" for any unrecognized locale.
      */
     public static function map_locale(string $wp_locale): string {
-        $known = ['en', 'hr', 'sl', 'de', 'it', 'fr', 'es', 'pt', 'pl', 'cs', 'sk', 'hu', 'ro', 'nl', 'sv', 'da', 'no', 'fi'];
         $two = strtolower(substr($wp_locale, 0, 2));
-        return in_array($two, $known, true) ? $two : 'en';
+        return in_array($two, self::SUPPORTED_LANG_CODES, true) ? $two : 'en';
     }
 }
