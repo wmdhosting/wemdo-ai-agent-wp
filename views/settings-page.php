@@ -19,7 +19,21 @@ if (!defined('ABSPATH')) {
             <tr>
                 <th scope="row"><label for="wemdo-api-key"><?php esc_html_e('API key', 'wemdo-ai-agent'); ?></label></th>
                 <td>
-                    <input type="password" id="wemdo-api-key" name="api_key" value="<?php echo esc_attr($opts['api_key'] ?? ''); ?>" class="regular-text" autocomplete="off">
+                    <?php
+                    // Never reflect the saved key back into the DOM — admins
+                    // viewing the settings page (legitimate or compromised
+                    // session, browser extensions, screen-recorders) would
+                    // otherwise see the secret on every render. We show a
+                    // descriptive placeholder when a key is set; save handler
+                    // preserves the existing key when this field is left empty.
+                    $key_is_set = !empty($opts['api_key']);
+                    $placeholder = $key_is_set
+                        ? __('•••••••• (set — paste a new key to replace)', 'wemdo-ai-agent')
+                        : __('ak_… (paste from AI Layer admin)', 'wemdo-ai-agent');
+                    ?>
+                    <input type="password" id="wemdo-api-key" name="api_key" value=""
+                           placeholder="<?php echo esc_attr($placeholder); ?>"
+                           class="regular-text" autocomplete="off">
                     <button type="button" class="button" id="wemdo-toggle-key"><?php esc_html_e('Show', 'wemdo-ai-agent'); ?></button>
                     <button type="button" class="button" id="wemdo-verify-key"><?php esc_html_e('Verify', 'wemdo-ai-agent'); ?></button>
                     <p id="wemdo-verify-result" style="margin-top: 8px;">
